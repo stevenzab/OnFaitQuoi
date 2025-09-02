@@ -1,32 +1,35 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * import {onCall} from "firebase-functions/v2/https";
- * import {onDocumentWritten} from "firebase-functions/v2/firestore";
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+import * as functions from "firebase-functions";
+import * as admin from "firebase-admin";
+import express from "express";
+import cors from "cors";
 
-import {setGlobalOptions} from "firebase-functions";
-import {onRequest} from "firebase-functions/https";
-import * as logger from "firebase-functions/logger";
+admin.initializeApp();
+const db = admin.firestore();
 
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
+const app = express();
+app.use(cors({origin: true}));
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+app.get("/getMessages", async (req, res) => {
+  try {
+    const snapshot = await db.collection("messages")
+        .orderBy("createdAt", "desc").get();
+    const messages = snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()}));
+    res.json(messages);
+  } catch (error) {
+    res.status(500)
+    .json({error: (error instanceof Error ? error.message : String(error))});
+  }
+});
 
-// export const helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+app.delete("/deleteMessage/:id", async (req, res) => {
+  try {
+    const {id} = req.params;
+    await db.collection("messages").doc(id).delete();
+    res.json({success: true, id});
+  } catch (error) {
+    res.status(500)
+    .json({error: (error instanceof Error ? error.message : String(error))});
+  }
+});
+
+exports.api = functions.https.onRequest(app);
